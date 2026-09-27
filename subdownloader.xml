@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>Subtitel downloader</Name>
-  <Repository>local-subdownloader:v7</Repository>
+  <Repository>pandaboynl/subtitel-downloader:latest</Repository>
   <Registry/>
   <Network>bridge</Network>
   <MyIP/>
@@ -13,7 +13,7 @@
   <Category>MediaApp:Other</Category>
   <WebUI>http://[IP]:[PORT:5000]</WebUI>
   <TemplateURL/>
-  <Icon>https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/opensubtitles.png</Icon>
+  <Icon>https://github.com/PandaBoyNL/subtitel-downloader/blob/main/icon.jpg</Icon>
   <ExtraParams/>
   <PostArgs/>
   <CPUset/>
