@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Subtitel downloader</title>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #2c2f33; color: white; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; background: #23272a; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        h2 { text-align: center; color: #7289da; border-bottom: 2px solid #444; padding-bottom: 15px;}
+        .item { padding: 12px; border-bottom: 1px solid #3a3e44; display: flex; align-items: center; transition: background 0.2s;}
+        .item:hover { background: #3a3e44; border-radius: 4px;}
+        .folder { color: #f1c40f; font-weight: bold; }
+        .file { color: #3498db; }
+        .item span { cursor: pointer; margin-left: 10px; flex-grow: 1; }
+        button, select { padding: 12px; background: #7289da; color: white; border: none; border-radius: 6px; cursor: pointer; margin-right: 8px; font-weight: bold; transition: background 0.2s;}
+        button:hover { background: #5b6eae; }
+        select { background: #2f3136; border: 1px solid #7289da; }
+        .result-item { background: #333; padding: 15px; margin-top: 10px; border-radius: 8px; border-left: 4px solid #7289da;}
+        .search-info { color: #99aab5; font-size: 0.9em; margin-bottom: 15px; border-bottom: 1px solid #444; padding-bottom: 10px;}
+        .error-msg { color: #e74c3c; font-weight: bold; }
+        .success-msg { color: #2ecc71; font-weight: bold; }
+        .loading-msg { color: #f1c40f; font-weight: bold; }
+        .batch-panel { background: #2f3136; padding: 20px; margin-top: 20px; border-radius: 8px; border: 1px solid #444; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;}
+        .log-box { background: #1e2124; padding: 15px; margin-top: 20px; height: 350px; overflow-y: auto; font-family: 'Consolas', monospace; font-size: 0.95em; border-radius: 8px; border: 2px solid #7289da;}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2 id="app-title">🍿 Subtitel downloader 🎬</h2>
+        
+        <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px; background: #2f3136; padding: 15px; border-radius: 8px;">
+            <label id="lbl-lang" style="font-weight: bold; font-size: 1.1em;">🌍 Taal:</label>
+            <select id="langSelect" style="flex-grow: 1;"></select>
+            <button id="btn-root" onclick="loadDir('')" style="background: #2ecc71;">🏠 Naar Root</button>
+        </div>
+        
+        <div class="batch-panel">
+            <button id="btn-sel-all" onclick="selectAll()">☑️ Alles Selecteren</button>
+            <button id="btn-desel" onclick="deselectAll()" style="background: #95a5a6;">🔲 Selectie Wissen</button>
+            <button id="btn-start" onclick="startBatch()" style="background: #e67e22; flex-grow: 1;">🚀 Start Batch Download & Sync</button>
+        </div>
+
+        <div id="batch-logs" class="log-box" style="display:none;"></div>
+        <div id="results" style="margin-top: 20px; margin-bottom: 20px;"></div>
+        
+        <h3 id="lbl-current-dir" style="margin-top: 30px;">📂 Huidige map: </h3>
+        <div id="browser" style="border-top: 2px solid #444; padding-top: 10px;"></div>
+    </div>
+    
+    <script>
+        // --- 1. LOKALISATIE (Automatische Vertaling) ---
+        const userLang = navigator.language.startsWith('nl') ? 'nl' : 'en';
+        const ui = {
+            nl: {
+                title: "🍿 Subtitel downloader 🎬", lang: "🌍 Taal van ondertitel:", root: "🏠 Naar Root (/media)",
+                selAll: "☑️ Alles Selecteren", desel: "🔲 Selectie Wissen", start: "🚀 Start Batch Download & Sync",
+                curDir: "📂 Huidige map:", up: "⬆️ .. (Omhoog)", search: "🔍 Zoeken naar ondertitels...",
+                noSub: "❌ Geen ondertitels gevonden.", dlBtn: "⬇️ Download & Synchroniseer",
+                dlLoad: "⏳ Bestand downloaden en audio sync starten...", scan: "🔍 Mappen scannen...",
+                found: "✅ Gevonden: {count} video's! Starten...", done: "🎉 Batch voltooid! Rapport is verzonden.",
+                selFirst: "⚠️ Selecteer eerst mappen of bestanden!"
+            },
+            en: {
+                title: "🍿 Subtitle Downloader 🎬", lang: "🌍 Subtitle Language:", root: "🏠 To Root (/media)",
+                selAll: "☑️ Select All", desel: "🔲 Clear Selection", start: "🚀 Start Batch Download & Sync",
+                curDir: "📂 Current folder:", up: "⬆️ .. (Up)", search: "🔍 Searching for subtitles...",
+                noSub: "❌ No subtitles found.", dlBtn: "⬇️ Download & Synchronize",
+                dlLoad: "⏳ Downloading and starting audio sync...", scan: "🔍 Scanning folders...",
+                found: "✅ Found: {count} videos! Starting...", done: "🎉 Batch processing complete! Report sent.",
+                selFirst: "⚠️ Please select folders or files first!"
+            }
+        };
+
+        const t = ui[userLang];
+        document.getElementById('app-title').innerText = t.title;
+        document.getElementById('lbl-lang').innerText = t.lang;
+        document.getElementById('btn-root').innerText = t.root;
+        document.getElementById('btn-sel-all').innerText = t.selAll;
+        document.getElementById('btn-desel').innerText = t.desel;
+        document.getElementById('btn-start').innerText = t.start;
+
+        let currentVideoPath = "";
+        
+        // --- 2. TALEN OPHALEN VAN DE API ---
+        async function loadLanguages() {
+            const res = await fetch('/api/languages');
+            const data = await res.json();
+            const select = document.getElementById('langSelect');
+            if(data.data) {
+                data.data.sort((a,b) => a.language_name.localeCompare(b.language_name));
+                data.data.forEach(l => {
+                    const opt = document.createElement('option');
+                    opt.value = l.language_code;
+                    opt.text = `${l.language_name} (${l.language_code})`;
+                    // Zet de dropdown standaard op de taal van de gebruiker
+                    if(l.language_code === userLang) opt.selected = true;
+                    select.appendChild(opt);
+                });
+            } else {
+                select.innerHTML = `<option value="${userLang}">${userLang.toUpperCase()}</option>`;
+            }
+        }
+        
+        async function loadDir(path) {
+            document.getElementById('batch-logs').style.display = 'none';
+            document.getElementById('results').innerHTML = '';
+            
+            const res = await fetch(`/api/browse?path=${encodeURIComponent(path)}`);
+            const data = await res.json();
+            const browser = document.getElementById('browser');
+            
+            document.getElementById('lbl-current-dir').innerText = `${t.curDir} ${data.current_path || '/'}`;
+            browser.innerHTML = '';
+            
+            if (data.current_path !== "") {
+                const parent = data.current_path.substring(0, data.current_path.lastIndexOf('/'));
+                browser.innerHTML += `<div class="item folder" onclick="loadDir('${parent}')">${t.up}</div>`;
+            }
+            data.items.forEach(item => {
+                if (item.is_dir) {
+                    browser.innerHTML += `<div class="item folder"><input type="checkbox" class="file-checkbox" value="${item.path}"><span onclick="loadDir('${item.path}')">📁 ${item.name}</span></div>`;
+                } else {
+                    browser.innerHTML += `<div class="item file"><input type="checkbox" class="file-checkbox" value="${item.path}"><span onclick="searchSub('${item.name}', '${item.path}')">🎬 ${item.name}</span></div>`;
+                }
+            });
+        }
+        
+        function selectAll() { document.querySelectorAll('.file-checkbox').forEach(cb => cb.checked = true); }
+        function deselectAll() { document.querySelectorAll('.file-checkbox').forEach(cb => cb.checked = false); }
+        
+        function logMessage(msg, type='info') {
+            const logBox = document.getElementById('batch-logs');
+            logBox.style.display = 'block';
+            let color = '#ccc';
+            if(type==='success') color = '#2ecc71';
+            if(type==='error') color = '#e74c3c';
+            if(type==='warn') color = '#f1c40f';
+            if(type==='api') color = '#3498db';
+            logBox.innerHTML += `<div style="color: ${color}">[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+        
+        async function startBatch() {
+            const checkboxes = document.querySelectorAll('.file-checkbox:checked');
+            if(checkboxes.length === 0) { alert(t.selFirst); return; }
+            
+            const lang = document.getElementById('langSelect').value;
+            document.getElementById('results').innerHTML = `<h3 class="loading-msg">⚙️ Batch modus actief...</h3>`;
+            document.getElementById('batch-logs').innerHTML = '';
+            
+            let paths = [];
+            checkboxes.forEach(cb => paths.push(cb.value));
+            logMessage(`⚙️ ${t.scan}`);
+            
+            const scanRes = await fetch('/api/scan', {
+                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({paths: paths})
+            });
+            const scanData = await scanRes.json();
+            const filesToProcess = scanData.files;
+            
+            if(filesToProcess.length === 0) return;
+            logMessage(t.found.replace('{count}', filesToProcess.length), 'success');
+            
+            let successList = [];
+            let failedList = [];
+            
+            for (let i = 0; i < filesToProcess.length; i++) {
+                const filename = filesToProcess[i].name;
+                const fullpath = filesToProcess[i].path;
+                logMessage(`🎬 (${i+1}/${filesToProcess.length}): ${fullpath}`);
+                
+                try {
+                    const searchRes = await fetch('/api/search', {
+                        method: 'POST', headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({filename: filename, fullpath: fullpath, language: lang})
+                    });
+                    const searchData = await searchRes.json();
+                    
+                    if (searchData.success && searchData.data && searchData.data.length > 0) {
+                        let succesvol = false;
+                        const maxPogingen = Math.min(searchData.data.length, 5);
+                        
+                        for(let j = 0; j < maxPogingen; j++) {
+                            const fileId = searchData.data[j].attributes.files[0].file_id;
+                            const dlRes = await fetch('/api/download', {
+                                method: 'POST', headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({file_id: fileId, video_path: fullpath, language: lang})
+                            });
+                            const dlData = await dlRes.json();
+                            if (dlData.success) { 
+                                logMessage(`   ${dlData.message}`, 'success');
+                                succesvol = true;
+                                successList.push(filename);
+                                break; 
+                            }
+                        }
+                        if(!succesvol) {
+                            logMessage(`   ❌ Alle pogingen mislukt.`, 'error');
+                            failedList.push(filename + " (Corrupt)");
+                        }
+                    } else {
+                        logMessage(`   ❌ Niet gevonden.`, 'error');
+                        failedList.push(filename + " (Not found)");
+                    }
+                } catch (err) {
+                    logMessage(`   ⚠️ Fout: ${err}`, 'error');
+                    failedList.push(filename + " (Error)");
+                }
+                logMessage('-----------------------------------');
+            }
+            
+            document.getElementById('results').innerHTML = `<h3 class="success-msg">${t.done}</h3>`;
+            fetch('/api/notify', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({success: successList, failed: failedList})
+            });
+        }
+        
+        async function searchSub(filename, fullpath) {
+            currentVideoPath = fullpath;
+            const lang = document.getElementById('langSelect').value;
+            document.getElementById('results').innerHTML = `<i>${t.search}</i>`;
+            const res = await fetch('/api/search', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({filename: filename, fullpath: fullpath, language: lang})
+            });
+            const data = await res.json();
+            let html = `<h3>Resultaten:</h3><div class="search-info">🔎 <strong>${data.search_term}</strong></div>`;
+            if (data.success && data.data && data.data.length > 0) {
+                data.data.forEach(sub => {
+                    const fileId = sub.attributes.files[0].file_id;
+                    html += `<div class="result-item"><strong>📄 ${sub.attributes.release}</strong><br>
+                        ⬇️ ${sub.attributes.download_count} | ⭐️ ${sub.attributes.ratings}<br>
+                        <button style="margin-top:10px;" onclick="downloadSub(${fileId})">${t.dlBtn}</button></div>`;
+                });
+            } else { html += `<p class="error-msg">${t.noSub}</p>`; }
+            document.getElementById('results').innerHTML = html;
+        }
+
+        async function downloadSub(fileId) {
+            const lang = document.getElementById('langSelect').value;
+            document.getElementById('results').innerHTML = `<p class="loading-msg">${t.dlLoad}</p>`;
+            const res = await fetch('/api/download', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({file_id: fileId, video_path: currentVideoPath, language: lang})
+            });
+            const data = await res.json();
+            if (data.success) { document.getElementById('results').innerHTML = `<p class="success-msg">${data.message}</p>`; } 
+            else { document.getElementById('results').innerHTML = `<p class="error-msg">❌ Fout: ${data.error}</p>`; }
+        }
+        
+        loadLanguages();
+        loadDir('');
+    </script>
+</body>
+</html>
