@@ -1,8 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<CAProfile>
+<CommunityApplications>
   <Profile>
-    <Name>PandaBoyNL</Name>
-    <Support>https://forums.unraid.net/topic/JOUW-FORUM-TOPIC-LINK</Support>
-    <DonateLink>https://www.paypal.com/paypalme/PandaBoyNL</DonateLink>
+    Welkom in de repository van PandaBoyNL! Hier vind je handige, snelle applicaties voor je Unraid server, waaronder Torrent Maker Pro en de gloednieuwe Ultimate Video Converter. Voor hulp, het melden van bugs of het aanvragen van nieuwe functies kun je gebruik maken van de contact knop in de apps of direct via Discord.
   </Profile>
-</CAProfile>
+  <Icon>https://raw.githubusercontent.com/PandaBoyNL/subtitel-downloader/main/icon.jpg</Icon>
+  <WebPage>https://github.com/PandaBoyNL</WebPage>
+  
+  <!-- Support link -->
+  <Discord>https://discord.gg/JOUW_INVITE_LINK_HIER</Discord>
+  
+  <DonateLink>https://paypal.me/PandaBoyNL</DonateLink>
+  <DonateText>☕ Buy me a coffee (Support de developer!)</DonateText>
+</CommunityApplications>
