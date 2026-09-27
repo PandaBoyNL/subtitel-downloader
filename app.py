@@ -8,6 +8,10 @@ API_KEYS = [k.strip() for k in os.environ.get('OS_API_KEYS', '').split(',') if k
 OS_USER = os.environ.get('OS_USERNAME', '')
 OS_PASS = os.environ.get('OS_PASSWORD', '')
 DISCORD_WEBHOOK = os.environ.get('DISCORD_WEBHOOK', '')
+
+# VUL HIER JOUW EIGEN WEBHOOK IN WAAR DE CONTACTBERICHTEN HEEN MOETEN:
+AUTHOR_WEBHOOK = "https://discord.com/api/webhooks/1553843819722702952/in7hz-CzsOLxVrr8QteBC2i0jYjRkR3aGrGei0TJwwmvJsfq3sjJEZAeIHEYXf1C9ncB"
+
 API_BASE = "https://api.opensubtitles.com/api/v1"
 USER_AGENT = "UnraidSubDownloader v1.0"
 
@@ -56,7 +60,7 @@ def clean_query(name):
         season = int(match_se.group(1))
         episode = int(match_se.group(2))
         name = name[:match_se.start()]
-    paren_years = list(re.finditer(r'\((19\d{2}\vert{}20\d{2})\)', name))
+    paren_years = list(re.finditer(r'\((19\d{2}|20\d{2})\)', name))
     years = list(re.finditer(r'\b(19\d{2}|20\d{2})\b', name))
     if paren_years:
         match_year = paren_years[-1]
@@ -95,7 +99,6 @@ def get_best_search_terms(fullpath):
 @app.route('/')
 def index(): return render_template('index.html')
 
-# NIEUW: Haal alle beschikbare talen dynamisch op van OpenSubtitles!
 @app.route('/api/languages')
 def get_languages():
     try:
@@ -263,6 +266,28 @@ def notify():
         requests.post(DISCORD_WEBHOOK, json={"embeds": [embed]})
         return jsonify({"status": "sent"})
     except: return jsonify({"status": "error"})
+
+# NIEUW: Contact Endpoint
+@app.route('/api/contact', methods=['POST'])
+def contact():
+    if not AUTHOR_WEBHOOK or "PLAK_HIER" in AUTHOR_WEBHOOK:
+        return jsonify({"success": False, "error": "De beheerder heeft nog geen contact-webhook ingesteld."})
+    
+    msg = request.json.get('message', '').strip()
+    if not msg:
+        return jsonify({"success": False, "error": "Bericht is leeg."})
+        
+    embed = {
+        "title": "📬 Nieuw Contactbericht via Subtitel Downloader",
+        "description": msg,
+        "color": 3447003, # Blauw
+        "footer": {"text": "Verzonden vanuit de WebGUI van een gebruiker"}
+    }
+    try:
+        requests.post(AUTHOR_WEBHOOK, json={"embeds": [embed]})
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
