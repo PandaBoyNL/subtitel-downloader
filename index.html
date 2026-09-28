@@ -6,7 +6,12 @@
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #2c2f33; color: white; padding: 20px; }
         .container { max-width: 900px; margin: 0 auto; background: #23272a; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-        h2 { text-align: center; color: #7289da; border-bottom: 2px solid #444; padding-bottom: 15px;}
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #444; padding-bottom: 15px; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;}
+        h2 { color: #7289da; margin: 0;}
+        .coffee-btn { background: #ffc439; color: #111; font-weight: bold; padding: 10px 15px; border-radius: 6px; text-decoration: none; border: 2px solid #d3a32c; transition: 0.2s;}
+        .coffee-btn:hover { background: #e5b033; }
+        .contact-btn { background: #3498db; color: white; font-weight: bold; padding: 10px 15px; border-radius: 6px; border: none; cursor: pointer; transition: 0.2s;}
+        .contact-btn:hover { background: #2980b9; }
         .item { padding: 12px; border-bottom: 1px solid #3a3e44; display: flex; align-items: center; transition: background 0.2s;}
         .item:hover { background: #3a3e44; border-radius: 4px;}
         .folder { color: #f1c40f; font-weight: bold; }
@@ -22,66 +27,87 @@
         .loading-msg { color: #f1c40f; font-weight: bold; }
         .batch-panel { background: #2f3136; padding: 20px; margin-top: 20px; border-radius: 8px; border: 1px solid #444; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;}
         .log-box { background: #1e2124; padding: 15px; margin-top: 20px; height: 350px; overflow-y: auto; font-family: 'Consolas', monospace; font-size: 0.95em; border-radius: 8px; border: 2px solid #7289da;}
+        
+        /* Modal Styles */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-content { background: #2c2f33; padding: 25px; border-radius: 12px; width: 450px; max-width: 90%; border: 2px solid #7289da; box-shadow: 0 10px 25px rgba(0,0,0,0.8); }
+        .modal-content textarea { width: 100%; box-sizing: border-box; background: #23272a; color: white; border: 1px solid #444; border-radius: 6px; padding: 12px; resize: vertical; margin-top: 10px; font-family: inherit;}
+        
+        /* Status Bar */
+        .status-bar { display: flex; justify-content: space-between; align-items: center; background: #2f3136; padding: 15px; border-radius: 8px; border: 1px solid #444; margin-bottom: 20px; flex-wrap: wrap; gap: 15px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2 id="app-title">🍿 Subtitel downloader 🎬</h2>
+        <div class="header">
+            <h2 id="app-title">🍿 Subtitel downloader 🎬</h2>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <button class="contact-btn" onclick="openContact()">💬 Contact Beheerder</button>
+                <a href="https://www.paypal.com/paypalme/PandaBoyNL" target="_blank" class="coffee-btn">👉 Buy me a coffee</a>
+            </div>
+        </div>
         
-        <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px; background: #2f3136; padding: 15px; border-radius: 8px;">
-            <label id="lbl-lang" style="font-weight: bold; font-size: 1.1em;">🌍 Taal:</label>
-            <select id="langSelect" style="flex-grow: 1;"></select>
-            <button id="btn-root" onclick="loadDir('')" style="background: #2ecc71;">🏠 Naar Root</button>
+        <div class="status-bar">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <label id="lbl-lang" style="font-weight: bold; font-size: 1.1em;">🌍 Taal:</label>
+                <select id="langSelect"></select>
+                <button id="btn-root" onclick="loadDir('')" style="background: #2ecc71;">🏠 Naar Root</button>
+            </div>
+            <!-- NIEUW: API Limiet Status Indicator -->
+            <div id="api-status" style="font-weight: bold; color: #f1c40f; font-size: 1.1em;">
+                ⏳ API Status laden...
+            </div>
         </div>
         
         <div class="batch-panel">
             <button id="btn-sel-all" onclick="selectAll()">☑️ Alles Selecteren</button>
             <button id="btn-desel" onclick="deselectAll()" style="background: #95a5a6;">🔲 Selectie Wissen</button>
-            <button id="btn-start" onclick="startBatch()" style="background: #e67e22; flex-grow: 1;">🚀 Start Batch Download & Sync</button>
+            <button id="btn-start" onclick="startBatch()" style="background: #e67e22; flex-grow: 1;">🚀 Start Achtergrond Batch</button>
         </div>
 
+        <div id="results" style="margin-top: 20px;"></div>
+        
+        <!-- Live Logboek Paneel -->
         <div id="batch-logs" class="log-box" style="display:none;"></div>
-        <div id="results" style="margin-top: 20px; margin-bottom: 20px;"></div>
         
         <h3 id="lbl-current-dir" style="margin-top: 30px;">📂 Huidige map: </h3>
         <div id="browser" style="border-top: 2px solid #444; padding-top: 10px;"></div>
     </div>
     
+    <!-- Contact Modal -->
+    <div id="contactModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 style="margin-top: 0; color: #7289da;" id="modal-title">💬 Stuur een bericht</h3>
+            <textarea id="contactMsg" rows="5" placeholder="Typ hier je bericht..."></textarea>
+            <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+                <button onclick="closeContact()" style="background: #95a5a6; margin: 0;">Annuleren</button>
+                <button onclick="sendContact()" style="background: #2ecc71; margin: 0;" id="modal-send">Verzenden</button>
+            </div>
+        </div>
+    </div>
+    
     <script>
-        // --- 1. LOKALISATIE (Automatische Vertaling) ---
         const userLang = navigator.language.startsWith('nl') ? 'nl' : 'en';
-        const ui = {
-            nl: {
-                title: "🍿 Subtitel downloader 🎬", lang: "🌍 Taal van ondertitel:", root: "🏠 Naar Root (/media)",
-                selAll: "☑️ Alles Selecteren", desel: "🔲 Selectie Wissen", start: "🚀 Start Batch Download & Sync",
-                curDir: "📂 Huidige map:", up: "⬆️ .. (Omhoog)", search: "🔍 Zoeken naar ondertitels...",
-                noSub: "❌ Geen ondertitels gevonden.", dlBtn: "⬇️ Download & Synchroniseer",
-                dlLoad: "⏳ Bestand downloaden en audio sync starten...", scan: "🔍 Mappen scannen...",
-                found: "✅ Gevonden: {count} video's! Starten...", done: "🎉 Batch voltooid! Rapport is verzonden.",
-                selFirst: "⚠️ Selecteer eerst mappen of bestanden!"
-            },
-            en: {
-                title: "🍿 Subtitle Downloader 🎬", lang: "🌍 Subtitle Language:", root: "🏠 To Root (/media)",
-                selAll: "☑️ Select All", desel: "🔲 Clear Selection", start: "🚀 Start Batch Download & Sync",
-                curDir: "📂 Current folder:", up: "⬆️ .. (Up)", search: "🔍 Searching for subtitles...",
-                noSub: "❌ No subtitles found.", dlBtn: "⬇️ Download & Synchronize",
-                dlLoad: "⏳ Downloading and starting audio sync...", scan: "🔍 Scanning folders...",
-                found: "✅ Found: {count} videos! Starting...", done: "🎉 Batch processing complete! Report sent.",
-                selFirst: "⚠️ Please select folders or files first!"
-            }
-        };
-
-        const t = ui[userLang];
-        document.getElementById('app-title').innerText = t.title;
-        document.getElementById('lbl-lang').innerText = t.lang;
-        document.getElementById('btn-root').innerText = t.root;
-        document.getElementById('btn-sel-all').innerText = t.selAll;
-        document.getElementById('btn-desel').innerText = t.desel;
-        document.getElementById('btn-start').innerText = t.start;
-
         let currentVideoPath = "";
+        let logInterval = null;
         
-        // --- 2. TALEN OPHALEN VAN DE API ---
+        function openContact() { document.getElementById('contactModal').style.display = 'flex'; document.getElementById('contactMsg').value = ''; }
+        function closeContact() { document.getElementById('contactModal').style.display = 'none'; }
+        
+        async function sendContact() {
+            const msg = document.getElementById('contactMsg').value.trim();
+            if(!msg) return alert("Bericht is leeg!");
+            const btn = document.getElementById('modal-send');
+            btn.innerText = "⏳..."; btn.disabled = true;
+            try {
+                const res = await fetch('/api/contact', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({message: msg}) });
+                const data = await res.json();
+                if(data.success) { alert("✅ Bericht verzonden!"); closeContact(); } 
+                else { alert("❌ Fout: " + data.error); }
+            } catch(e) { alert("❌ Systeemfout: " + e); }
+            btn.innerText = "Verzenden"; btn.disabled = false;
+        }
+
         async function loadLanguages() {
             const res = await fetch('/api/languages');
             const data = await res.json();
@@ -92,29 +118,41 @@
                     const opt = document.createElement('option');
                     opt.value = l.language_code;
                     opt.text = `${l.language_name} (${l.language_code})`;
-                    // Zet de dropdown standaard op de taal van de gebruiker
                     if(l.language_code === userLang) opt.selected = true;
                     select.appendChild(opt);
                 });
-            } else {
-                select.innerHTML = `<option value="${userLang}">${userLang.toUpperCase()}</option>`;
+            }
+        }
+        
+        // NIEUW: Haalt de status en overgebleven limieten van al je keys op
+        async function loadApiStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+                const statusDiv = document.getElementById('api-status');
+                if (data.logged_in) {
+                    statusDiv.innerHTML = `${data.account_type} | ⬇️ ${data.remaining_downloads} resterend`;
+                    statusDiv.style.color = '#2ecc71'; // Groen
+                } else {
+                    statusDiv.innerHTML = `⚠️ Niet ingelogd op OpenSubtitles`;
+                    statusDiv.style.color = '#e74c3c'; // Rood
+                }
+            } catch(e) {
+                document.getElementById('api-status').innerText = "⚠️ Kan status niet laden";
             }
         }
         
         async function loadDir(path) {
-            document.getElementById('batch-logs').style.display = 'none';
             document.getElementById('results').innerHTML = '';
-            
             const res = await fetch(`/api/browse?path=${encodeURIComponent(path)}`);
             const data = await res.json();
             const browser = document.getElementById('browser');
-            
-            document.getElementById('lbl-current-dir').innerText = `${t.curDir} ${data.current_path || '/'}`;
+            document.getElementById('lbl-current-dir').innerText = `📂 Huidige map: ${data.current_path || '/'}`;
             browser.innerHTML = '';
             
             if (data.current_path !== "") {
                 const parent = data.current_path.substring(0, data.current_path.lastIndexOf('/'));
-                browser.innerHTML += `<div class="item folder" onclick="loadDir('${parent}')">${t.up}</div>`;
+                browser.innerHTML += `<div class="item folder" onclick="loadDir('${parent}')">⬆️ .. (Omhoog)</div>`;
             }
             data.items.forEach(item => {
                 if (item.is_dir) {
@@ -128,129 +166,146 @@
         function selectAll() { document.querySelectorAll('.file-checkbox').forEach(cb => cb.checked = true); }
         function deselectAll() { document.querySelectorAll('.file-checkbox').forEach(cb => cb.checked = false); }
         
-        function logMessage(msg, type='info') {
-            const logBox = document.getElementById('batch-logs');
-            logBox.style.display = 'block';
-            let color = '#ccc';
-            if(type==='success') color = '#2ecc71';
-            if(type==='error') color = '#e74c3c';
-            if(type==='warn') color = '#f1c40f';
-            if(type==='api') color = '#3498db';
-            logBox.innerHTML += `<div style="color: ${color}">[${new Date().toLocaleTimeString()}] ${msg}</div>`;
-            logBox.scrollTop = logBox.scrollHeight;
+        // --- LIVE LOGBOEK LOGICA ---
+        function startLogPolling() {
+            if (logInterval) clearInterval(logInterval);
+            document.getElementById('batch-logs').style.display = 'block';
+            logInterval = setInterval(fetchLogs, 2000); // Check elke 2 seconden
+            fetchLogs(); 
+        }
+        
+        async function fetchLogs() {
+            try {
+                const res = await fetch('/api/batch_logs');
+                const data = await res.json();
+                const logBox = document.getElementById('batch-logs');
+                
+                // Zorg dat het blok altijd zichtbaar is als er logs zijn
+                if (data.running || (data.logs && data.logs.length > 0)) {
+                    logBox.style.display = 'block';
+                }
+                
+                if (data.logs && data.logs.length > 0) {
+                    let html = '';
+                    data.logs.forEach(l => {
+                        let color = '#ccc';
+                        if(l.type === 'success') color = '#2ecc71';
+                        if(l.type === 'error') color = '#e74c3c';
+                        if(l.type === 'warn') color = '#f1c40f';
+                        html += `<div style="color: ${color}">[${l.time}] ${l.msg}</div>`;
+                    });
+                    
+                    if (logBox.innerHTML !== html) {
+                        logBox.innerHTML = html;
+                        logBox.scrollTop = logBox.scrollHeight;
+                    }
+                }
+                
+                // Als de batch is afgerond, stop het pollen en herlaad de API status
+                if (!data.running && data.logs.length > 0 && data.logs[data.logs.length-1].msg.includes("afgerond")) {
+                    clearInterval(logInterval);
+                    document.getElementById('btn-start').innerText = "🚀 Start Achtergrond Batch";
+                    document.getElementById('btn-start').disabled = false;
+                    loadApiStatus(); // Ververs het aantal overgebleven downloads!
+                }
+            } catch (e) {}
         }
         
         async function startBatch() {
             const checkboxes = document.querySelectorAll('.file-checkbox:checked');
-            if(checkboxes.length === 0) { alert(t.selFirst); return; }
+            if(checkboxes.length === 0) { alert("⚠️ Selecteer eerst mappen of bestanden!"); return; }
             
             const lang = document.getElementById('langSelect').value;
-            document.getElementById('results').innerHTML = `<h3 class="loading-msg">⚙️ Batch modus actief...</h3>`;
-            document.getElementById('batch-logs').innerHTML = '';
-            
             let paths = [];
             checkboxes.forEach(cb => paths.push(cb.value));
-            logMessage(`⚙️ ${t.scan}`);
             
-            const scanRes = await fetch('/api/scan', {
-                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({paths: paths})
-            });
-            const scanData = await scanRes.json();
-            const filesToProcess = scanData.files;
+            const btn = document.getElementById('btn-start');
+            btn.disabled = true;
+            btn.innerText = "⏳ Bezig met starten...";
             
-            if(filesToProcess.length === 0) return;
-            logMessage(t.found.replace('{count}', filesToProcess.length), 'success');
-            
-            let successList = [];
-            let failedList = [];
-            
-            for (let i = 0; i < filesToProcess.length; i++) {
-                const filename = filesToProcess[i].name;
-                const fullpath = filesToProcess[i].path;
-                logMessage(`🎬 (${i+1}/${filesToProcess.length}): ${fullpath}`);
+            try {
+                const res = await fetch('/api/batch_start', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({paths: paths, language: lang})
+                });
+                const data = await res.json();
                 
-                try {
-                    const searchRes = await fetch('/api/search', {
-                        method: 'POST', headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({filename: filename, fullpath: fullpath, language: lang})
-                    });
-                    const searchData = await searchRes.json();
-                    
-                    if (searchData.success && searchData.data && searchData.data.length > 0) {
-                        let succesvol = false;
-                        const maxPogingen = Math.min(searchData.data.length, 5);
-                        
-                        for(let j = 0; j < maxPogingen; j++) {
-                            const fileId = searchData.data[j].attributes.files[0].file_id;
-                            const dlRes = await fetch('/api/download', {
-                                method: 'POST', headers: {'Content-Type': 'application/json'},
-                                body: JSON.stringify({file_id: fileId, video_path: fullpath, language: lang})
-                            });
-                            const dlData = await dlRes.json();
-                            if (dlData.success) { 
-                                logMessage(`   ${dlData.message}`, 'success');
-                                succesvol = true;
-                                successList.push(filename);
-                                break; 
-                            }
-                        }
-                        if(!succesvol) {
-                            logMessage(`   ❌ Alle pogingen mislukt.`, 'error');
-                            failedList.push(filename + " (Corrupt)");
-                        }
-                    } else {
-                        logMessage(`   ❌ Niet gevonden.`, 'error');
-                        failedList.push(filename + " (Not found)");
-                    }
-                } catch (err) {
-                    logMessage(`   ⚠️ Fout: ${err}`, 'error');
-                    failedList.push(filename + " (Error)");
+                if (data.success) {
+                    document.getElementById('results').innerHTML = `<div class="result-item" style="border-left: 4px solid #2ecc71; margin-bottom: 10px;">
+                        <h3 class="success-msg" style="margin-top:0;">🚀 Achtergrond-Batch is gestart!</h3>
+                        <p style="color:#99aab5; margin-bottom:0;">Je mag je browser nu veilig sluiten. De applicatie werkt zelfstandig door en toont hieronder het live logboek.</p>
+                    </div>`;
+                    startLogPolling();
+                } else {
+                    alert("Fout bij starten: " + data.error);
+                    btn.innerText = "🚀 Start Achtergrond Batch";
+                    btn.disabled = false;
                 }
-                logMessage('-----------------------------------');
-            }
+            } catch(e) { alert("Systeemfout bij starten: " + e); }
             
-            document.getElementById('results').innerHTML = `<h3 class="success-msg">${t.done}</h3>`;
-            fetch('/api/notify', {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({success: successList, failed: failedList})
-            });
+            deselectAll();
         }
         
         async function searchSub(filename, fullpath) {
             currentVideoPath = fullpath;
             const lang = document.getElementById('langSelect').value;
-            document.getElementById('results').innerHTML = `<i>${t.search}</i>`;
+            document.getElementById('results').innerHTML = `<i>🔍 Zoeken...</i>`;
             const res = await fetch('/api/search', {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({filename: filename, fullpath: fullpath, language: lang})
             });
             const data = await res.json();
+            
+            if (data.rate_limited) {
+                document.getElementById('results').innerHTML = `<p class="error-msg">❌ API Limiet bereikt op alle keys!</p>`;
+                return;
+            }
+            
             let html = `<h3>Resultaten:</h3><div class="search-info">🔎 <strong>${data.search_term}</strong></div>`;
             if (data.success && data.data && data.data.length > 0) {
                 data.data.forEach(sub => {
                     const fileId = sub.attributes.files[0].file_id;
                     html += `<div class="result-item"><strong>📄 ${sub.attributes.release}</strong><br>
                         ⬇️ ${sub.attributes.download_count} | ⭐️ ${sub.attributes.ratings}<br>
-                        <button style="margin-top:10px;" onclick="downloadSub(${fileId})">${t.dlBtn}</button></div>`;
+                        <button style="margin-top:10px;" onclick="downloadSub(${fileId})">⬇️ Download & Sync</button></div>`;
                 });
-            } else { html += `<p class="error-msg">${t.noSub}</p>`; }
+            } else { html += `<p class="error-msg">❌ Geen ondertitels gevonden.</p>`; }
             document.getElementById('results').innerHTML = html;
         }
 
         async function downloadSub(fileId) {
             const lang = document.getElementById('langSelect').value;
-            document.getElementById('results').innerHTML = `<p class="loading-msg">${t.dlLoad}</p>`;
+            document.getElementById('results').innerHTML = `<p class="loading-msg">⏳ Bestand downloaden...</p>`;
             const res = await fetch('/api/download', {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({file_id: fileId, video_path: currentVideoPath, language: lang})
             });
             const data = await res.json();
-            if (data.success) { document.getElementById('results').innerHTML = `<p class="success-msg">${data.message}</p>`; } 
+            if (data.rate_limited) { document.getElementById('results').innerHTML = `<p class="error-msg">❌ Download limiet bereikt op alle keys!</p>`; }
+            else if (data.success) { 
+                document.getElementById('results').innerHTML = `<p class="success-msg">${data.message}</p>`; 
+                loadApiStatus(); // Limiet updaten na een handmatige succesvolle download
+            } 
             else { document.getElementById('results').innerHTML = `<p class="error-msg">❌ Fout: ${data.error}</p>`; }
         }
         
-        loadLanguages();
-        loadDir('');
+        // Zodra de pagina laadt:
+        window.onload = async () => {
+            loadLanguages();
+            loadDir('');
+            loadApiStatus(); // Laad de API limieten direct in!
+            
+            // Check of er al een batch op de achtergrond draait
+            try {
+                const res = await fetch('/api/batch_logs');
+                const data = await res.json();
+                if (data.running || data.logs.length > 0) {
+                    document.getElementById('btn-start').disabled = data.running;
+                    if (data.running) document.getElementById('btn-start').innerText = "⏳ Batch is al bezig...";
+                    startLogPolling(); // Klap het logboek direct open!
+                }
+            } catch(e) {}
+        };
     </script>
 </body>
 </html>
