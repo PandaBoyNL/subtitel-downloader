@@ -15,7 +15,7 @@ A powerful, lightweight WebUI to automatically search, download, and synchronize
 ## 📡 OpenSubtitles API & Feedback
 By default, this application connects to the official OpenSubtitles.com REST API. **You will need a free OpenSubtitles account and API Key(s) to use this container.**
 
-**Found a bug or have an idea?** If you know of a better way to filter results, or if you run into any matching issues, please contact me! You can reach out by creating an Issue on this GitHub repository. I am always looking to improve the app!
+**Found a bug or have an idea?** If you know of a better way to filter results, or if you run into any matching issues, please contact me! You can reach out by creating an Issue on this GitHub repository, or use the contact 💬 button in the webgui. I am always looking to improve the app!
 
 ## 📦 Unraid Installation
 1. Go to the **Apps** tab (Community Applications) in Unraid.
