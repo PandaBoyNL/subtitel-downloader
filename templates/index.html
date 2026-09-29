@@ -3,7 +3,6 @@
 <head>
     <title>Subtitel downloader</title>
     <meta charset="UTF-8">
-    <!-- Hier is de icon.jpg direct gekoppeld voor de browser -->
     <link rel="icon" href="https://raw.githubusercontent.com/PandaBoyNL/subtitel-downloader/main/icon.jpg" type="image/jpeg">
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #2c2f33; color: white; padding: 20px; }
@@ -29,13 +28,9 @@
         .loading-msg { color: #f1c40f; font-weight: bold; }
         .batch-panel { background: #2f3136; padding: 20px; margin-top: 20px; border-radius: 8px; border: 1px solid #444; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;}
         .log-box { background: #1e2124; padding: 15px; margin-top: 20px; height: 350px; overflow-y: auto; font-family: 'Consolas', monospace; font-size: 0.95em; border-radius: 8px; border: 2px solid #7289da;}
-        
-        /* Modal Styles */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center; }
         .modal-content { background: #2c2f33; padding: 25px; border-radius: 12px; width: 450px; max-width: 90%; border: 2px solid #7289da; box-shadow: 0 10px 25px rgba(0,0,0,0.8); }
         .modal-content textarea { width: 100%; box-sizing: border-box; background: #23272a; color: white; border: 1px solid #444; border-radius: 6px; padding: 12px; resize: vertical; margin-top: 10px; font-family: inherit;}
-        
-        /* Status Bar */
         .status-bar { display: flex; justify-content: space-between; align-items: center; background: #2f3136; padding: 15px; border-radius: 8px; border: 1px solid #444; margin-bottom: 20px; flex-wrap: wrap; gap: 15px; }
     </style>
 </head>
@@ -55,7 +50,6 @@
                 <select id="langSelect"></select>
                 <button id="btn-root" onclick="loadDir('')" style="background: #2ecc71;">🏠 Naar Root</button>
             </div>
-            <!-- API Limiet Status Indicator -->
             <div id="api-status" style="font-weight: bold; color: #f1c40f; font-size: 1.1em;">
                 ⏳ API Status laden...
             </div>
@@ -65,18 +59,18 @@
             <button id="btn-sel-all" onclick="selectAll()">☑️ Alles Selecteren</button>
             <button id="btn-desel" onclick="deselectAll()" style="background: #95a5a6;">🔲 Selectie Wissen</button>
             <button id="btn-start" onclick="startBatch()" style="background: #e67e22; flex-grow: 1;">🚀 Start Achtergrond Batch</button>
+            <!-- NIEUWE STOP KNOP (verborgen by default) -->
+            <button id="btn-stop" onclick="stopBatch()" style="background: #e74c3c; display: none; font-weight: bold; flex-grow: 1;">🛑 Stop Batch</button>
         </div>
 
         <div id="results" style="margin-top: 20px;"></div>
         
-        <!-- Live Logboek Paneel -->
         <div id="batch-logs" class="log-box" style="display:none;"></div>
         
         <h3 id="lbl-current-dir" style="margin-top: 30px;">📂 Huidige map: </h3>
         <div id="browser" style="border-top: 2px solid #444; padding-top: 10px;"></div>
     </div>
     
-    <!-- Contact Modal -->
     <div id="contactModal" class="modal-overlay">
         <div class="modal-content">
             <h3 style="margin-top: 0; color: #7289da;" id="modal-title">💬 Stuur een bericht</h3>
@@ -133,7 +127,7 @@
                 const statusDiv = document.getElementById('api-status');
                 if (data.logged_in) {
                     statusDiv.innerHTML = `${data.account_type} | ⬇️ ${data.remaining_downloads} resterend`;
-                    statusDiv.style.color = '#2ecc71';
+                    statusDiv.style.color = data.remaining_downloads > 0 ? '#2ecc71' : '#e74c3c';
                 } else {
                     statusDiv.innerHTML = `⚠️ Niet ingelogd op OpenSubtitles`;
                     statusDiv.style.color = '#e74c3c';
@@ -180,8 +174,16 @@
                 const data = await res.json();
                 const logBox = document.getElementById('batch-logs');
                 
-                if (data.running || (data.logs && data.logs.length > 0)) {
+                // Beheer weergave van Start/Stop knoppen op basis van de live server-status
+                if (data.running) {
+                    document.getElementById('btn-start').style.display = 'none';
+                    document.getElementById('btn-stop').style.display = 'inline-block';
                     logBox.style.display = 'block';
+                } else {
+                    document.getElementById('btn-start').style.display = 'inline-block';
+                    document.getElementById('btn-stop').style.display = 'none';
+                    document.getElementById('btn-stop').innerText = "🛑 Stop Batch"; // Reset knop tekst
+                    document.getElementById('btn-stop').disabled = false;
                 }
                 
                 if (data.logs && data.logs.length > 0) {
@@ -200,10 +202,8 @@
                     }
                 }
                 
-                if (!data.running && data.logs.length > 0 && data.logs[data.logs.length-1].msg.includes("afgerond")) {
+                if (!data.running && data.logs.length > 0 && (data.logs[data.logs.length-1].msg.includes("afgerond") || data.logs[data.logs.length-1].msg.includes("definitief gestopt"))) {
                     clearInterval(logInterval);
-                    document.getElementById('btn-start').innerText = "🚀 Start Achtergrond Batch";
-                    document.getElementById('btn-start').disabled = false;
                     loadApiStatus();
                 }
             } catch (e) {}
@@ -216,10 +216,6 @@
             const lang = document.getElementById('langSelect').value;
             let paths = [];
             checkboxes.forEach(cb => paths.push(cb.value));
-            
-            const btn = document.getElementById('btn-start');
-            btn.disabled = true;
-            btn.innerText = "⏳ Bezig met starten...";
             
             try {
                 const res = await fetch('/api/batch_start', {
@@ -234,14 +230,20 @@
                         <p style="color:#99aab5; margin-bottom:0;">Je mag je browser nu veilig sluiten. De applicatie werkt zelfstandig door en toont hieronder het live logboek.</p>
                     </div>`;
                     startLogPolling();
-                } else {
-                    alert("Fout bij starten: " + data.error);
-                    btn.innerText = "🚀 Start Achtergrond Batch";
-                    btn.disabled = false;
-                }
+                } else { alert("Fout bij starten: " + data.error); }
             } catch(e) { alert("Systeemfout bij starten: " + e); }
             
             deselectAll();
+        }
+
+        // NIEUWE FUNCTIE: Om de batch handmatig via de GUI te stoppen
+        async function stopBatch() {
+            const btn = document.getElementById('btn-stop');
+            btn.disabled = true;
+            btn.innerText = "⏳ Bezig met stoppen...";
+            try {
+                await fetch('/api/batch_stop', { method: 'POST' });
+            } catch(e) { alert("Fout bij stoppen: " + e); }
         }
         
         async function searchSub(filename, fullpath) {
@@ -290,14 +292,13 @@
         window.onload = async () => {
             loadLanguages();
             loadDir('');
-            loadApiStatus();
+            loadApiStatus(); 
+            setInterval(loadApiStatus, 30000); 
             
             try {
                 const res = await fetch('/api/batch_logs');
                 const data = await res.json();
                 if (data.running || data.logs.length > 0) {
-                    document.getElementById('btn-start').disabled = data.running;
-                    if (data.running) document.getElementById('btn-start').innerText = "⏳ Batch is al bezig...";
                     startLogPolling();
                 }
             } catch(e) {}
