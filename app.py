@@ -1,24 +1,21 @@
 import os, random, requests, re, subprocess, struct, time, threading
-import logging
 from flask import Flask, render_template, request, jsonify
 
 app = Flask(__name__)
 
-# Zet de webserver-spam uit in je Docker console
-log = logging.getLogger('werkzeug')
-log.setLevel(logging.ERROR)
-
 MEDIA_DIR = os.environ.get('MEDIA_DIR', '/media')
+# Haalt alleen de ALLEREERSTE API key op, negeert de rest
+_api_keys_env = os.environ.get('OS_API_KEYS', '')
+API_KEY = _api_keys_env.split(',')[0].strip() if _api_keys_env else ''
+
+OS_USER = os.environ.get('OS_USERNAME', '')
+OS_PASS = os.environ.get('OS_PASSWORD', '')
 DISCORD_WEBHOOK = os.environ.get('DISCORD_WEBHOOK', '')
-AUTHOR_WEBHOOK = "https://discord.com/api/webhooks/..." 
+
+AUTHOR_WEBHOOK = "https://discord.com/api/webhooks/1553843819722702952/in7hz-CzsOLxVrr8QteBC2i0jYjRkR3aGrGei0TJwwmvJsfq3sjJEZAeIHEYXf1C9ncB" 
 
 API_BASE = "https://api.opensubtitles.com/api/v1"
 USER_AGENT = "UnraidSubDownloader v1.0"
-
-# --- OPGESCHOOND: Slechts 1 account en 1 key (negeert eventuele komma's) ---
-OS_USER = os.environ.get('OS_USERNAME', '').split(',')[0].strip()
-OS_PASS = os.environ.get('OS_PASSWORD', '').split(',')[0].strip()
-API_KEY = os.environ.get('OS_API_KEYS', '').split(',')[0].strip()
 
 batch_logs = []
 is_batch_running = False
@@ -150,6 +147,7 @@ def send_discord_webhook(success_list, failed_list, skipped_list=None):
     except: pass
 
 def get_user_quota():
+    if not API_KEY: return False, False, 0
     payload = {"username": OS_USER, "password": OS_PASS}
     headers = {"Api-Key": API_KEY, "Content-Type": "application/json", "User-Agent": USER_AGENT, "Accept": "application/json"}
     try:
@@ -171,6 +169,7 @@ def internal_search(fullpath, lang):
     file_hash = hashFile(abs_path) if os.path.exists(abs_path) else None
     
     def fetch_and_filter(prms, check_strict=True):
+        if not API_KEY: return [], False
         valid = []
         headers = {"Api-Key": API_KEY, "User-Agent": USER_AGENT, "Accept": "application/json"}
         try:
@@ -178,7 +177,7 @@ def internal_search(fullpath, lang):
             if r.status_code == 429:
                 time.sleep(3) 
                 r = requests.get(f"{API_BASE}/subtitles", headers=headers, params=prms, timeout=10)
-                if r.status_code == 429: return []
+                if r.status_code == 429: return [], True # Zoeklimiet definitief bereikt
                     
             raw_subs = r.json().get('data', []) if r.status_code == 200 else []
             for sub in raw_subs:
@@ -214,16 +213,17 @@ def internal_search(fullpath, lang):
                 sub['sort_score'] = score
                 valid.append(sub)
         except Exception:
-            return []
+            pass
             
         valid.sort(key=lambda x: x['sort_score'], reverse=True)
-        return valid
+        return valid, False
 
     try:
         subs, search_term_display = [], ""
         if file_hash:
             search_term_display = f"Hash: {file_hash}"
-            subs = fetch_and_filter({"moviehash": file_hash, "languages": lang}, check_strict=False)
+            subs, is_limited = fetch_and_filter({"moviehash": file_hash, "languages": lang}, check_strict=False)
+            if is_limited: return True, search_term_display, [], "API limiet bereikt"
             
         if not subs:
             search_term_display = f"Titel: '{title}' | Jaar: '{year}'"
@@ -231,40 +231,43 @@ def internal_search(fullpath, lang):
             if year: p3["year"] = year
             if season: p3["season_number"] = season
             if episode: p3["episode_number"] = episode
-            subs = fetch_and_filter(p3, check_strict=True)
+            subs, is_limited = fetch_and_filter(p3, check_strict=True)
+            if is_limited: return True, search_term_display, [], "API limiet bereikt"
             
         if not subs and year:
             search_term_display = f"Titel: '{title} {year}'"
             p3b = {"query": f"{title} {year}", "languages": lang}
             if season: p3b["season_number"] = season
             if episode: p3b["episode_number"] = episode
-            subs = fetch_and_filter(p3b, check_strict=True)
+            subs, is_limited = fetch_and_filter(p3b, check_strict=True)
+            if is_limited: return True, search_term_display, [], "API limiet bereikt"
             
         if not subs and year:
             search_term_display = f"Titel: '{title}' (Zonder Jaar)"
             p4 = {"query": title, "languages": lang}
             if season: p4["season_number"] = season
             if episode: p4["episode_number"] = episode
-            subs = fetch_and_filter(p4, check_strict=True)
+            subs, is_limited = fetch_and_filter(p4, check_strict=True)
+            if is_limited: return True, search_term_display, [], "API limiet bereikt"
             
-        return search_term_display, subs, ""
+        return False, search_term_display, subs, ""
     except Exception as e:
-        return "", [], str(e)
+        return False, "", [], str(e)
 
 def internal_download(file_id, video_path, lang):
+    if not API_KEY: return False, False, "", "Geen API key gevonden."
     payload = {"username": OS_USER, "password": OS_PASS}
     headers = {"Api-Key": API_KEY, "Content-Type": "application/json", "User-Agent": USER_AGENT, "Accept": "application/json"}
     try:
         login_r = requests.post(f"{API_BASE}/login", json=payload, headers=headers, timeout=10)
-        if login_r.status_code != 200: 
-            return False, False, "", "Inlogfout bij OpenSubtitles (controleer gegevens)."
+        if login_r.status_code != 200: return False, False, "", "Inloggen mislukt."
         
         token = login_r.json().get('token')
         dl_headers = {"Api-Key": API_KEY, "Authorization": f"Bearer {token}", "Content-Type": "application/json", "User-Agent": USER_AGENT, "Accept": "application/json"}
         dl_r = requests.post(f"{API_BASE}/download", headers=dl_headers, json={"file_id": int(file_id)}, timeout=10)
         
         if dl_r.status_code == 429 or 'limit' in dl_r.text.lower():
-            return False, True, "", "Downloadlimiet bereikt."
+            return False, True, "", "Dagelijkse downloadlimiet bereikt."
             
         if dl_r.status_code == 200:
             link = dl_r.json().get('link')
@@ -275,18 +278,17 @@ def internal_download(file_id, video_path, lang):
             abs_video_path = os.path.join(MEDIA_DIR, video_path)
             srt_path = f"{os.path.splitext(abs_video_path)[0]}.{lang}.srt"
             with open(srt_path, 'wb') as f: f.write(srt_data.content)
-            
             try:
                 subprocess.run(["ffs", abs_video_path, "-i", srt_path, "-o", srt_path], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                msg = f"Perfect synchroon! (Via account: {OS_USER})"
+                msg = "✅ Perfect synchroon!"
             except Exception:
-                msg = f"Originele timing behouden. (Via account: {OS_USER})"
+                msg = "⚠️ Originele timing behouden."
             
             return True, False, srt_path, msg
-    except Exception:
-        pass
+    except Exception as e:
+        return False, False, "", str(e)
         
-    return False, False, "", "Fout tijdens downloaden."
+    return False, False, "", "Onbekende fout tijdens downloaden."
 
 def background_batch_processor(paths, lang):
     global is_batch_running, stop_batch_flag
@@ -333,7 +335,25 @@ def background_batch_processor(paths, lang):
             
         log_msg(f"🎬 Starten met: {filename}", "info")
         
-        search_term, subs, err = internal_search(fullpath, lang)
+        is_rate_limited, search_term, subs, err = internal_search(fullpath, lang)
+        
+        if is_rate_limited:
+            log_msg("⏳ API zoeklimiet bereikt. Batch gepauzeerd... (Druk op Stop om af te breken)", "warn")
+            while True:
+                if stop_batch_flag: break
+                for _ in range(12): # Wacht even 1 minuut in totaal (12 * 5 seconden) om rate limit te laten afkoelen
+                    if stop_batch_flag: break
+                    time.sleep(5)
+                break
+            if stop_batch_flag: break
+            
+            # Probeer het nog 1x na de kleine afkoelingspauze
+            is_rate_limited, search_term, subs, err = internal_search(fullpath, lang)
+            if is_rate_limited:
+                log_msg(f"❌ Zoeken mislukt vanwege aanhoudende rate-limiet: {filename}", "error")
+                failed_list.append(f"{filename} (Rate limit)")
+                continue
+
         if not subs:
             log_msg(f"❌ Niet gevonden: {filename}", "error")
             failed_list.append(f"{filename} (Niet gevonden)")
@@ -360,7 +380,7 @@ def background_batch_processor(paths, lang):
                     break
             
             if rate_limited_dl:
-                log_msg("⏳ Downloadlimiet bereikt. Batch gepauzeerd... (Druk op Stop om af te breken)", "warn")
+                log_msg("⏳ Dagelijkse downloadlimiet bereikt. Batch gepauzeerd... (Druk op Stop om af te breken)", "warn")
                 send_discord_alert("⏸️ Batch Gepauzeerd", "De dagelijkse limiet is bereikt. De app wacht nu op nieuwe downloads.", 16753920)
                 
                 while True:
@@ -372,10 +392,10 @@ def background_batch_processor(paths, lang):
                         
                     if stop_batch_flag: break
                         
-                    success, vip, remaining = get_user_quota()
-                    if remaining > 0:
-                        log_msg(f"▶️ Limiet is gereset! Batch wordt hervat.", "success")
-                        send_discord_alert("▶️ Batch Hervat", f"Limieten gereset. Batch gaat verder!", 3066993)
+                    success, is_vip, remaining = get_user_quota()
+                    if success and remaining > 0:
+                        log_msg(f"▶️ Limiet is gereset ({remaining} resterend)! Batch wordt hervat.", "success")
+                        send_discord_alert("▶️ Batch Hervat", "Limieten gereset. Batch gaat verder!", 3066993)
                         break
                 continue 
                 
@@ -423,7 +443,8 @@ def search():
     data = request.json
     fullpath = data.get('fullpath', data.get('filename'))
     lang = data.get('language', 'nl')
-    search_term, subs, err = internal_search(fullpath, lang)
+    is_limit, search_term, subs, err = internal_search(fullpath, lang)
+    if is_limit: return jsonify({"success": False, "rate_limited": True, "error": "API limiet bereikt!"})
     if err: return jsonify({"success": False, "search_term": search_term, "error": err})
     return jsonify({"success": True, "search_term": search_term, "data": subs})
 
@@ -462,12 +483,15 @@ def batch_stop():
 @app.route('/api/status', methods=['GET'])
 def status():
     if not API_KEY:
-        return jsonify({"account_type": "Geen key ingesteld", "remaining_downloads": 0, "logged_in": False})
+        return jsonify({"account_type": "⚠️️ Geen API key ingesteld", "remaining_downloads": 0, "logged_in": False})
     
-    success, vip, remaining = get_user_quota()
-    account_type = "⭐ Betaald / VIP" if vip else "🆓 Gratis"
-    
-    return jsonify({"account_type": account_type, "remaining_downloads": remaining, "logged_in": success})
+    success, is_vip, remaining = get_user_quota()
+    if success:
+        # Dit is wat er nu op je scherm getoond wordt!
+        account_type = "⭐ VIP Account" if is_vip else "🆓 Gratis Account"
+        return jsonify({"account_type": account_type, "remaining_downloads": remaining, "logged_in": True})
+        
+    return jsonify({"account_type": "⚠️ Fout bij inloggen", "remaining_downloads": 0, "logged_in": False})
 
 @app.route('/api/contact', methods=['POST'])
 def contact():
