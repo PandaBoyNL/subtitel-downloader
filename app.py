@@ -11,7 +11,7 @@ OS_USER = os.environ.get('OS_USERNAME', '')
 OS_PASS = os.environ.get('OS_PASSWORD', '')
 DISCORD_WEBHOOK = os.environ.get('DISCORD_WEBHOOK', '')
 
-AUTHOR_WEBHOOK = "https://discord.com/api/webhooks/1554654534360506430/pl5Fn-rxHXwoqxLQwdrGpobMhQFhR3-en3sabaOhndUzLng0s1LJEL5phECdztBJ2orS" 
+AUTHOR_WEBHOOK = "ENTER_YOUR_WEBHOOK_URL_HERE" 
 
 API_BASE = "https://api.opensubtitles.com/api/v1"
 USER_AGENT = "UnraidSubDownloader v1.0"
