@@ -4,7 +4,6 @@ from flask import Flask, render_template, request, jsonify
 app = Flask(__name__)
 
 MEDIA_DIR = os.environ.get('MEDIA_DIR', '/media')
-# Haalt alleen de ALLEREERSTE API key op, negeert de rest
 _api_keys_env = os.environ.get('OS_API_KEYS', '')
 API_KEY = _api_keys_env.split(',')[0].strip() if _api_keys_env else ''
 
@@ -12,7 +11,7 @@ OS_USER = os.environ.get('OS_USERNAME', '')
 OS_PASS = os.environ.get('OS_PASSWORD', '')
 DISCORD_WEBHOOK = os.environ.get('DISCORD_WEBHOOK', '')
 
-AUTHOR_WEBHOOK = "https://discord.com/api/webhooks/1553843819722702952/in7hz-CzsOLxVrr8QteBC2i0jYjRkR3aGrGei0TJwwmvJsfq3sjJEZAeIHEYXf1C9ncB" 
+AUTHOR_WEBHOOK = "https://discord.com/api/webhooks/1554654534360506430/pl5Fn-rxHXwoqxLQwdrGpobMhQFhR3-en3sabaOhndUzLng0s1LJEL5phECdztBJ2orS" 
 
 API_BASE = "https://api.opensubtitles.com/api/v1"
 USER_AGENT = "UnraidSubDownloader v1.0"
@@ -177,7 +176,7 @@ def internal_search(fullpath, lang):
             if r.status_code == 429:
                 time.sleep(3) 
                 r = requests.get(f"{API_BASE}/subtitles", headers=headers, params=prms, timeout=10)
-                if r.status_code == 429: return [], True # Zoeklimiet definitief bereikt
+                if r.status_code == 429: return [], True 
                     
             raw_subs = r.json().get('data', []) if r.status_code == 200 else []
             for sub in raw_subs:
@@ -266,7 +265,8 @@ def internal_download(file_id, video_path, lang):
         dl_headers = {"Api-Key": API_KEY, "Authorization": f"Bearer {token}", "Content-Type": "application/json", "User-Agent": USER_AGENT, "Accept": "application/json"}
         dl_r = requests.post(f"{API_BASE}/download", headers=dl_headers, json={"file_id": int(file_id)}, timeout=10)
         
-        if dl_r.status_code == 429 or 'limit' in dl_r.text.lower():
+        error_text = dl_r.text.lower()
+        if dl_r.status_code in [406, 429] or 'limit' in error_text or 'remaining' in error_text or 'exceeded' in error_text:
             return False, True, "", "Dagelijkse downloadlimiet bereikt."
             
         if dl_r.status_code == 200:
@@ -306,7 +306,12 @@ def background_batch_processor(paths, lang):
             if not fname.startswith('.') and 'sample' not in fname.lower():
                 found_files.append({"name": fname, "path": os.path.relpath(full_path, MEDIA_DIR)})
         elif os.path.isdir(full_path):
+            if os.path.basename(full_path).lower() == 'featurettes': continue # Sla hoofdmap over
+            
             for root, dirs, files in os.walk(full_path):
+                # NIEUW: Zorg dat os.walk niet IN mappen genaamd 'featurettes' gaat zoeken
+                dirs[:] = [d for d in dirs if d.lower() != 'featurettes']
+                
                 for file in files:
                     if file.lower().endswith(('.mkv', '.mp4', '.avi')):
                         if not file.startswith('.') and 'sample' not in file.lower():
@@ -341,13 +346,12 @@ def background_batch_processor(paths, lang):
             log_msg("⏳ API zoeklimiet bereikt. Batch gepauzeerd... (Druk op Stop om af te breken)", "warn")
             while True:
                 if stop_batch_flag: break
-                for _ in range(12): # Wacht even 1 minuut in totaal (12 * 5 seconden) om rate limit te laten afkoelen
+                for _ in range(12): 
                     if stop_batch_flag: break
                     time.sleep(5)
                 break
             if stop_batch_flag: break
             
-            # Probeer het nog 1x na de kleine afkoelingspauze
             is_rate_limited, search_term, subs, err = internal_search(fullpath, lang)
             if is_rate_limited:
                 log_msg(f"❌ Zoeken mislukt vanwege aanhoudende rate-limiet: {filename}", "error")
@@ -431,6 +435,9 @@ def browse():
     items = []
     if os.path.exists(target_path):
         for entry in sorted(os.listdir(target_path)):
+            # NIEUW: Toon mappen genaamd 'featurettes' NIET in de webinterface
+            if entry.lower() == 'featurettes': continue
+                
             f = os.path.join(target_path, entry)
             if os.path.isdir(f): items.append({"name": entry, "is_dir": True, "path": os.path.relpath(f, MEDIA_DIR)})
             elif entry.lower().endswith(('.mkv', '.mp4', '.avi')):
@@ -480,14 +487,19 @@ def batch_stop():
         stop_batch_flag = True
     return jsonify({"success": True})
 
+@app.route('/api/clear_logs', methods=['POST'])
+def clear_logs():
+    if not is_batch_running:
+        batch_logs.clear()
+    return jsonify({"success": True})
+
 @app.route('/api/status', methods=['GET'])
 def status():
     if not API_KEY:
-        return jsonify({"account_type": "⚠️️ Geen API key ingesteld", "remaining_downloads": 0, "logged_in": False})
+        return jsonify({"account_type": "⚠ Geen API key ingesteld", "remaining_downloads": 0, "logged_in": False})
     
     success, is_vip, remaining = get_user_quota()
     if success:
-        # Dit is wat er nu op je scherm getoond wordt!
         account_type = "⭐ VIP Account" if is_vip else "🆓 Gratis Account"
         return jsonify({"account_type": account_type, "remaining_downloads": remaining, "logged_in": True})
         
