@@ -11,8 +11,6 @@ OS_USER = os.environ.get('OS_USERNAME', '')
 OS_PASS = os.environ.get('OS_PASSWORD', '')
 DISCORD_WEBHOOK = os.environ.get('DISCORD_WEBHOOK', '')
 
-AUTHOR_WEBHOOK = "https://discord.com/api/webhooks/1554654534360506430/pl5Fn-rxHXwoqxLQwdrGpobMhQFhR3-en3sabaOhndUzLng0s1LJEL5phECdztBJ2orS" 
-
 API_BASE = "https://api.opensubtitles.com/api/v1"
 USER_AGENT = "UnraidSubDownloader v1.0"
 
@@ -265,7 +263,6 @@ def internal_download(file_id, video_path, lang):
         dl_headers = {"Api-Key": API_KEY, "Authorization": f"Bearer {token}", "Content-Type": "application/json", "User-Agent": USER_AGENT, "Accept": "application/json"}
         dl_r = requests.post(f"{API_BASE}/download", headers=dl_headers, json={"file_id": int(file_id)}, timeout=10)
         
-        # DE FIX: We kijken NU pas naar woorden zoals 'remaining' als de statuscode NIET 200 OK is.
         if dl_r.status_code != 200:
             error_text = dl_r.text.lower()
             if dl_r.status_code in [406, 429] or 'limit' in error_text or 'remaining' in error_text or 'exceeded' in error_text:
@@ -505,16 +502,6 @@ def status():
         return jsonify({"account_type": account_type, "remaining_downloads": remaining, "logged_in": True})
         
     return jsonify({"account_type": "⚠️ Fout bij inloggen", "remaining_downloads": 0, "logged_in": False})
-
-@app.route('/api/contact', methods=['POST'])
-def contact():
-    if not AUTHOR_WEBHOOK or "PLAK_HIER" in AUTHOR_WEBHOOK: return jsonify({"success": False, "error": "Geen webhook."})
-    msg = request.json.get('message', '').strip()
-    if not msg: return jsonify({"success": False, "error": "Bericht leeg."})
-    try:
-        requests.post(AUTHOR_WEBHOOK, json={"embeds": [{"title": "📬 Contactbericht", "description": msg, "color": 3447003}]}, timeout=10)
-        return jsonify({"success": True})
-    except Exception as e: return jsonify({"success": False, "error": str(e)})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
