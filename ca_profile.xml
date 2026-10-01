@@ -6,8 +6,7 @@
   <Icon>https://raw.githubusercontent.com/PandaBoyNL/subtitel-downloader/main/icon.jpg</Icon>
   <WebPage>https://github.com/PandaBoyNL</WebPage>
   
-  <!-- Support link -->
-  <Discord>https://discord.gg/JOUW_INVITE_LINK_HIER</Discord>
+  <Support>https://pandaboynl-s-windows-exe-en-unraid-docker-support.geminilaunch.com</Support>
   
   <DonateLink>https://paypal.me/PandaBoyNL</DonateLink>
   <DonateText>☕ Buy me a coffee (Support de developer!)</DonateText>
